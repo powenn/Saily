@@ -64,6 +64,9 @@ UserDefaults
     .standard
     .setValue(documentsDirectory.path, forKey: "wiki.qaq.chromatic.setupLocation")
 
+// calling chdir avoiding putting junk file into root
+FileManager.default.changeCurrentDirectoryPath(documentsDirectory.path)
+
 // MARK: - Logging Engine
 
 do {
@@ -88,13 +91,20 @@ Dog.shared.join("App",
                 """,
                 level: .info)
 
+private let environment = ProcessInfo.processInfo.environment
+#if DEBUG
+    for (key, value) in environment {
+        Dog.shared.join("Env", "\(key): \(value)", level: .verbose)
+    }
+#endif
+
 // MARK: - Auxiliary Execute
 
-private let result = AuxiliaryExecute.rootspawn(command: "whoami", args: [], timeout: 1) { _ in }
+private let result = AuxiliaryExecuteWrapper.rootspawn(command: "whoami", args: [], timeout: 1) { _ in }
 Dog.shared.join("Privilege", "stdout: [\(result.1.trimmingCharacters(in: .whitespacesAndNewlines))]", level: .info)
 Dog.shared.join("Privilege", "stderr: [\(result.2.trimmingCharacters(in: .whitespacesAndNewlines))]", level: .info)
 
-AuxiliaryExecute.setupExecutables()
+AuxiliaryExecuteWrapper.setupExecutables()
 
 // MARK: - Boot Application
 
@@ -117,7 +127,13 @@ public private(set) var applicationShouldEnterRecovery = false
 
  */
 
-do {
+repeat {
+    if let preWarmRead = environment["ActivePrewarm"],
+       preWarmRead == "1"
+    {
+        Dog.shared.join("App", "ignoring fail safe startup due to ActivePrewarm")
+        break
+    }
     let manually = documentsDirectory
         .appendingPathComponent("enterAppRecovery")
     if FileManager.default.fileExists(atPath: manually.path) {
@@ -151,7 +167,7 @@ do {
     DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
         try? FileManager.default.removeItem(at: applicationRecoveryFlag)
     }
-}
+} while false
 
 print(
     """
